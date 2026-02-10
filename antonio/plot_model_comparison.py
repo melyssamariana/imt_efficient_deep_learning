@@ -7,6 +7,7 @@ from models.vgg import VGG
 from models.resnet import ResNet18, ResNet50, ResNet101
 from models.densenet import DenseNet121
 from models.preact_resnet import PreActResNet18
+from models.resnet_s import resnet20
 
 def count_parameters(model):
     """Count the total number of parameters in a model"""
@@ -17,10 +18,12 @@ def main():
     models_info = {
         'VGG16': {'accuracy': 92.64, 'model': VGG('VGG16')},
         'ResNet18': {'accuracy': 93.02, 'model': ResNet18()},
+        'ResNet18 (Ours)': {'accuracy': 94.29, 'model': ResNet18()},
         'ResNet50': {'accuracy': 93.62, 'model': ResNet50()},
         'ResNet101': {'accuracy': 93.75, 'model': ResNet101()},
         'DenseNet121': {'accuracy': 95.04, 'model': DenseNet121()},
         'PreActResNet18': {'accuracy': 95.11, 'model': PreActResNet18()},
+        'ResNet20 (Ours)': {'accuracy': 92.13, 'model': resnet20()},
     }
     
     # Calculate parameters for each model

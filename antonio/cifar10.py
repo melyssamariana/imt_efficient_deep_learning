@@ -12,8 +12,10 @@ normalize_scratch = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.19
 transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip(),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
     transforms.ToTensor(),
     normalize_scratch,
+    transforms.RandomErasing(p=0.25, scale=(0.02, 0.2), ratio=(0.3, 3.3), value="random"),
 ])
 
 transform_test = transforms.Compose([
