@@ -9,41 +9,22 @@ normalize_scratch = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.19
 
 # Transforms is a list of transformations applied on the 'raw' dataset before the data is fed to the network.
 # Here, Data augmentation (RandomCrop and Horizontal Flip) are applied to each batch, differently at each epoch, on the training set data only
+transform_train = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+    transforms.ToTensor(),
+    normalize_scratch,
+    transforms.RandomErasing(p=0.25, scale=(0.02, 0.2), ratio=(0.3, 3.3), value="random"),
+])
 
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    normalize_scratch,
-])
-'''
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-        transforms.ColorJitter(
-        brightness=0.2,
-        contrast=0.2,
-        saturation=0.2,
-        hue=0.05
-    ),
-    transforms.RandomRotation(15),
-    transforms.RandomGrayscale(p=0.1),
-    transforms.ToTensor(),
-    transforms.RandomErasing(
-        p=0.5,
-        scale=(0.02, 0.2),
-        ratio=(0.3, 3.3)
-    ),
-    normalize_scratch,
-])
-'''
 transform_test = transforms.Compose([
     transforms.ToTensor(),
     normalize_scratch,
 ])
 
 ### The data from CIFAR10 are already downloaded in the following folder
-rootdir = '/opt/img/effdl-cifar10/'
+rootdir = './cifar-10-batches-py'
 
 c10train = CIFAR10(rootdir,train=True,download=True,transform=transform_train)
 c10test = CIFAR10(rootdir,train=False,download=True,transform=transform_test)
