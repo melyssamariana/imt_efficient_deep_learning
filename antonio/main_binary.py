@@ -97,10 +97,10 @@ class EarlyStopping:
 
 def main():
     # Configuration
-    num_epochs = 150
+    num_epochs = 400
     learning_rate = 0.01
-    warmup_epochs = 5
-    early_stopping_patience = 150
+    warmup_epochs = 20
+    early_stopping_patience = 400
     early_stopping_min_delta = 0.0
     label_smoothing = 0.1
     weight_decay = 1e-3
