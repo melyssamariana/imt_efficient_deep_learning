@@ -270,7 +270,7 @@ class ConfigModel:
         plt.legend(fontsize=11)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig('loss_evolution.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'{self.path_backup}/loss_evolution_{self.label}.png', dpi=300, bbox_inches='tight')
         print(f"Loss evolution plot saved to '{self.path_backup}/loss_evolution_{self.label}.png'")
         plt.close()
         
