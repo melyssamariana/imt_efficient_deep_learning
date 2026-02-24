@@ -5,7 +5,7 @@ import torch.optim as optim
 from models.binaryconnect import BC
 from models.resnet_s import resnet20
 from cifar10 import trainloader, testloader, trainloader_subset
-from utils import ConfigModel
+from techniques.quantization import QuantizationAwareConfig
 def main():
     print("Start")
     print("==========")
@@ -14,7 +14,7 @@ def main():
 
     model = BC(resnet20())
 
-    cfg = ConfigModel(
+    cfg = QuantizationAwareConfig(
         # basic info
         label="lab3_a1",
         model=model,

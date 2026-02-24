@@ -144,22 +144,12 @@ class ConfigModel:
             
             # Zero the parameter gradients
             self.optimizer.zero_grad()
-
-            if self.input_dtype == 'binary':
-                self.model.binarization()
             
             # Forward + backward + optimize
             outputs = self.model(inputs)
             loss = self.criterion(outputs, labels)
             loss.backward()
-
-            if self.input_dtype == 'binary':
-                self.model.restore()
-
             self.optimizer.step()
-
-            if self.input_dtype == 'binary':
-                self.model.clip()
             
             # Statistics
             running_loss += loss.item()
@@ -182,14 +172,8 @@ class ConfigModel:
             for inputs, labels in tqdm(self.test_data, desc="Evaluating"):
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 
-                if self.input_dtype == 'binary':
-                    self.model.binarization()
-                
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, labels)
-
-                if self.input_dtype == 'binary':
-                    self.model.restore()
                 
                 running_loss += loss.item()
                 _, predicted = outputs.max(1)
