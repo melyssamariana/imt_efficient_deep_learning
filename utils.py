@@ -132,13 +132,22 @@ class ConfigModel:
             
             # Zero the parameter gradients
             self.optimizer.zero_grad()
+
+            if self.input_dtype == 'binary':
+                self.model.binarization()
             
             # Forward + backward + optimize
-            inputs = inputs.to(self.input_dtype)
             outputs = self.model(inputs)
             loss = self.criterion(outputs, labels)
             loss.backward()
+
+            if self.input_dtype == 'binary':
+                self.model.restore()
+
             self.optimizer.step()
+
+            if self.input_dtype == 'binary':
+                self.model.clip()
             
             # Statistics
             running_loss += loss.item()
@@ -160,10 +169,15 @@ class ConfigModel:
         with torch.no_grad():
             for inputs, labels in tqdm(self.test_data, desc="Evaluating"):
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
-                inputs = inputs.to(self.input_dtype)
+                
+                if self.input_dtype == 'binary':
+                    self.model.binarization()
                 
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, labels)
+
+                if self.input_dtype == 'binary':
+                    self.model.restore()
                 
                 running_loss += loss.item()
                 _, predicted = outputs.max(1)
@@ -280,3 +294,15 @@ class ConfigModel:
             wandb.save(f"./{self.path_backup}/acc_{self.label}.png")
             wandb.finish()
         
+    def to_qinput(self, type, x):
+        if type == "fp16":
+            return x.to(torch.float16)
+        
+    def to_qweight(self, type, x):
+        if type == "fp16":
+            return x.to(torch.float16)
+        
+    def to_qmodel(self, type, model):
+        if self.device == "cuda":
+            if type == "fp16":
+                return model.half()
