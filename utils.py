@@ -39,6 +39,9 @@ class ConfigModel:
                 test_data=None,
                 project_name = "imt_efficient_dl",
                 path_backup = "./",
+                input_dtype = torch.float32,
+                wand_on = True,
+                batch_size=128,
                 
                 # hyperparameters
                 num_epochs=150,
@@ -65,6 +68,10 @@ class ConfigModel:
         self.test_data = test_data
         self.project_name = project_name
         self.path_backup = path_backup
+        self.input_dtype = input_dtype
+        self.wand_on = wand_on
+        self.batch_size = batch_size
+
         # hyperparameters
         self.num_epochs = num_epochs
         self.learning_rate = learning_rate
@@ -89,28 +96,29 @@ class ConfigModel:
         self.train_accs = []
         self.test_accs = []
      
-        wandb.init(
-            project=self.project_name,
-            name=f"{self.model.__class__.__name__}_{self.label}",
-            config={
-                "model": self.model.__class__.__name__,
-                "epochs": self.num_epochs,
-                "learning_rate": self.learning_rate,
-                "warmup_epochs": self.warmup_epochs,
-                "label_smoothing": self.label_smoothing,
-                "optimizer": self.optimizer,
-                "momentum": self.momentum,
-                "nesterov": self.nesterov,
-                "weight_decay": self.weight_decay,
-                "scheduler": self.scheduler,
-                "t_max": self.num_epochs - self.warmup_epochs,
-                "early_stopping_patience": self.early_stopping_patience,
-                "early_stopping_min_delta": self.early_stopping_min_delta,
-                "device": str(self.device),
-            },
-        )
-        wandb.watch(self.model, log="gradients", log_freq=100)
-        
+        if self.wand_on:
+            wandb.init(
+                project=self.project_name,
+                name=f"{self.model.__class__.__name__}_{self.label}",
+                config={
+                    "model": self.model.__class__.__name__,
+                    "epochs": self.num_epochs,
+                    "learning_rate": self.learning_rate,
+                    "warmup_epochs": self.warmup_epochs,
+                    "label_smoothing": self.label_smoothing,
+                    "optimizer": self.optimizer,
+                    "momentum": self.momentum,
+                    "nesterov": self.nesterov,
+                    "weight_decay": self.weight_decay,
+                    "scheduler": self.scheduler,
+                    "t_max": self.num_epochs - self.warmup_epochs,
+                    "early_stopping_patience": self.early_stopping_patience,
+                    "early_stopping_min_delta": self.early_stopping_min_delta,
+                    "device": str(self.device),
+                },
+            )
+            wandb.watch(self.model, log="gradients", log_freq=100)
+            
 
     def train_epoch(self):
         """Train the model for one epoch"""
@@ -126,6 +134,7 @@ class ConfigModel:
             self.optimizer.zero_grad()
             
             # Forward + backward + optimize
+            inputs = inputs.to(self.input_dtype)
             outputs = self.model(inputs)
             loss = self.criterion(outputs, labels)
             loss.backward()
@@ -151,6 +160,7 @@ class ConfigModel:
         with torch.no_grad():
             for inputs, labels in tqdm(self.test_data, desc="Evaluating"):
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
+                inputs = inputs.to(self.input_dtype)
                 
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, labels)
@@ -172,6 +182,7 @@ class ConfigModel:
             patience=self.early_stopping_patience,
             min_delta=self.early_stopping_min_delta,
         )
+
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
             
@@ -190,17 +201,18 @@ class ConfigModel:
             # Update learning rate
             self.scheduler.step()
 
-            # Log metrics to Weights & Biases
-            wandb.log(
-                {
-                    "epoch": epoch + 1,
-                    "train_loss": train_loss,
-                    "train_acc": train_acc,
-                    "test_loss": test_loss,
-                    "test_acc": test_acc,
-                    "lr": self.scheduler.get_last_lr()[0],
-                }
-            )
+            if self.wand_on:
+                # Log metrics to Weights & Biases
+                wandb.log(
+                    {
+                        "epoch": epoch + 1,
+                        "train_loss": train_loss,
+                        "train_acc": train_acc,
+                        "test_loss": test_loss,
+                        "test_acc": test_acc,
+                        "lr": self.scheduler.get_last_lr()[0],
+                    }
+                )
             
             
             # Save best model
@@ -208,8 +220,9 @@ class ConfigModel:
                 best_acc = test_acc
                 torch.save(self.model.state_dict(), f'{self.path_backup}/best_model_{self.label}.pth')
                 print(f"✓ Best model saved! Train/Test Acc: {best_acc:.2f}%/{test_acc:.2f}% Train/Test Loss: {train_loss:.4f}/{test_loss:.4f} LR: {self.scheduler.get_last_lr()[0]:.6f}\n")
-                wandb.log({"best_acc": best_acc})
-                wandb.save(f"best_model_{self.label}.pth")
+                if self.wand_on:
+                    wandb.log({"best_acc": best_acc})
+                    wandb.save(f"best_model_{self.label}.pth")
         
             # Early stopping based on validation loss
             early_stopping.step(test_loss, self.model)
@@ -229,7 +242,8 @@ class ConfigModel:
         # Save final model
         torch.save(self.model.state_dict(), f'{self.path_backup}/final_model_{self.label}.pth')
         print(f"Final model saved to 'final_model_{self.label}.pth'")
-        wandb.save(f"final_model_{self.label}.pth")
+        if self.wand_on:
+            wandb.save(f"final_model_{self.label}.pth")
 
         # Plot loss evolution
         plt.figure(figsize=(10, 6))
@@ -245,7 +259,9 @@ class ConfigModel:
         plt.savefig('loss_evolution.png', dpi=300, bbox_inches='tight')
         print(f"Loss evolution plot saved to '{self.path_backup}/loss_evolution_{self.label}.png'")
         plt.close()
-        wandb.save(f"./{self.path_backup}/loss_evolution_{self.label}.png")
+        
+        if self.wand_on:
+            wandb.save(f"./{self.path_backup}/loss_evolution_{self.label}.png")
 
         # Plot accuracy evolution
         plt.figure(figsize=(10, 6))
@@ -260,6 +276,7 @@ class ConfigModel:
         plt.savefig(f'{self.path_backup}/accuracy_evolution_{self.label}.png', dpi=300, bbox_inches='tight')
         print(f"Accuracy evolution plot saved to '{self.path_backup}/accuracy_evolution_{self.label}.png'")
         plt.close()
-        wandb.save(f"./{self.path_backup}/acc_{self.label}.png")
-        wandb.finish()
+        if self.wand_on:
+            wandb.save(f"./{self.path_backup}/acc_{self.label}.png")
+            wandb.finish()
         
