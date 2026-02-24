@@ -183,6 +183,13 @@ class QuantizationAwareConfig(ConfigModel):
                 if self.wand_on:
                     wandb.log({"best_acc": best_acc})
                     wandb.save(best_path)
+            
+            else:
+                print(
+                    f"Train/Test Acc: {train_acc:.2f}%/{test_acc:.2f}% "
+                    f"Train/Test Loss: {train_loss:.4f}/{test_loss:.4f} "
+                    f"LR: {current_lr:.6f}\n"
+                )
 
             # === Early stopping by validation loss
             early_stopping.step(test_loss, self.model)

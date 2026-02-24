@@ -33,7 +33,7 @@ def main():
         input_dtype = 'bf16', # 'bc' for BinaryConnect, 'bf16' for float16
 
         # hyperparameters
-        num_epochs=1,
+        num_epochs=50,
         learning_rate=0.0001,
         weight_decay=1e-3,
         optimizer_name='SGD',
