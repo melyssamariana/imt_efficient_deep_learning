@@ -1,0 +1,33 @@
+HYPERPARAMETERS CURRENT
+========================
+Date: 7 février 2026
+
+Training Configuration:
+- Number of epochs: 80
+- Learning rate: 0.1
+- Batch size: 64
+- Optimizer: AdamW
+  - Weight decay: 1e-4
+
+Learning Rate Scheduler:
+- Type: MultiStepLR
+- Milestones: [60, 65, 70, 75]
+- Gamma: 0.5
+
+Model:
+- Architecture: ResNet18
+
+Dataset:
+- Training samples: 15,000 (subset)
+- Test samples: 10,000
+- Data augmentation: RandomCrop(32, padding=4), RandomHorizontalFlip, ColorJitter(0.2, 0.2, 0.2), RandomRotation(15)
+- Normalization: CIFAR10 mean/std
+
+Loss Function:
+- CrossEntropyLoss
+
+Device:
+- GPU (if available) / CPU
+
+Notes:
+- Training uses trainloader_subset
