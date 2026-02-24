@@ -1,0 +1,5 @@
+__pycache__/
+venv/
+*.pth
+cifar-10-batches-py/
+wandb/
