@@ -24,7 +24,7 @@ transform_test = transforms.Compose([
 ])
 
 ### The data from CIFAR10 are already downloaded in the following folder
-rootdir = './cifar-10-batches-py'
+rootdir = '/opt/img/effdl-cifar10/'
 
 c10train = CIFAR10(rootdir,train=True,download=True,transform=transform_train)
 c10test = CIFAR10(rootdir,train=False,download=True,transform=transform_test)

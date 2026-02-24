@@ -1,78 +1,124 @@
 import copy
-import torch.nn.utils.prune as prune
-import torch
-from torch import nn
-import utils
-from utils import ConfigModel
-import os
 import json
+import os
+from typing import List, Optional, Tuple
+
 import matplotlib.pyplot as plt
+import torch
+import torch.nn.utils.prune as prune
+from torch import nn
 
-class Prunning:
-    def __init__(self, cfgModel, pruning_percentage, ratios, params_to_prune):
-        # configuration object (model, loaders, device, etc.)
+
+ParamRef = Tuple[nn.Module, str]
+
+
+class _PrunningBase:
+    def __init__(self, cfgModel, ratios, params_to_prune):
         self.cfgModel = cfgModel
-
-        self.pruning_percentage = pruning_percentage
-        self.ratios = ratios
-        # initial list of (module, "weight") for the base model
+        self.ratios = list(ratios)
         self.params_to_prune = params_to_prune
+
+        self.result_ratio: List[float] = []
+        self.result_sparsity: List[float] = []
+        self.result_acc: List[float] = []
+        self.result_loss: List[float] = []
+
+    def _reset_results(self):
         self.result_ratio = []
         self.result_sparsity = []
         self.result_acc = []
         self.result_loss = []
-    
-    def compute_sparsity(self, model) -> float:
-        total_weights = 0
-        total_zeros = 0
-        with torch.no_grad():
-            # Check
-            for module in model.modules():
-                if isinstance(module, (nn.Conv2d, nn.Linear)) and module.weight is not None:
-                    w = module.weight
-                    total_weights += w.numel()
-                    total_zeros += (w == 0).sum().item()
 
-        if total_weights == 0:
-            return 0.0
-        return 100.0 * total_zeros / total_weights
-            
-    def print_results_table(self):
-        print("\n=== Global Pruning Results (FP16 Quantized ResNet20, no retraining) ===")
+    def _ensure_output_dir(self):
+        os.makedirs(self.cfgModel.path_backup, exist_ok=True)
+
+    def _conv_params(self, model: nn.Module) -> List[ParamRef]:
+        return [
+            (m, "weight")
+            for m in model.modules()
+            if isinstance(m, nn.Conv2d) and m.weight is not None
+        ]
+
+    def _all_prunable_params(self, model: nn.Module) -> List[ParamRef]:
+        return [
+            (m, "weight")
+            for m in model.modules()
+            if isinstance(m, (nn.Conv2d, nn.Linear)) and m.weight is not None
+        ]
+
+    def _remove_reparam(self, params: List[ParamRef]):
+        for module, name in params:
+            if hasattr(module, f"{name}_orig"):
+                prune.remove(module, name)
+
+    def _evaluate_copy(self, model: nn.Module) -> Tuple[float, float]:
+        original_model = self.cfgModel.model
+        try:
+            self.cfgModel.model = model.to(self.cfgModel.device)
+            loss, acc = self.cfgModel.evaluate()
+        finally:
+            self.cfgModel.model = original_model
+        return loss, acc
+
+    def compute_sparsity(self, model: nn.Module) -> float:
+        total = 0
+        zeros = 0
+        with torch.no_grad():
+            for module, name in self._all_prunable_params(model):
+                w = getattr(module, name)
+                total += w.numel()
+                zeros += (w == 0).sum().item()
+        return 0.0 if total == 0 else (100.0 * zeros / total)
+
+    def _count_total_and_zeros(self, model: nn.Module) -> Tuple[int, int]:
+        total = 0
+        zeros = 0
+        with torch.no_grad():
+            for module, name in self._all_prunable_params(model):
+                w = getattr(module, name)
+                total += w.numel()
+                zeros += (w == 0).sum().item()
+        return total, zeros
+
+    def _add_result(self, ratio: float, sparsity: float, acc: float, loss: float):
+        self.result_ratio.append(ratio)
+        self.result_sparsity.append(sparsity)
+        self.result_acc.append(acc)
+        self.result_loss.append(loss)
+
+    def print_results_table(self, title: str):
+        print(f"\n=== {title} ===")
         header = (
-            f"{'Pruning ratio':>14}"
-            f"{'Weight sparsity (%)':>22}"
+            f"{'Ratio':>10}"
+            f"{'Sparsity (%)':>16}"
             f"{'Accuracy (%)':>16}"
             f"{'Loss':>12}"
         )
         print(header)
         print("-" * len(header))
-        for r in self.result_ratio:
-            idx = self.result_ratio.index(r)
+        for i in range(len(self.result_ratio)):
             print(
-                f"{r:>14.2f}"
-                f"{self.result_sparsity[idx]:>22.2f}"
-                f"{self.result_acc[idx]:>16.2f}"
-                f"{self.result_loss[idx]:>12.4f}"
+                f"{self.result_ratio[i]:>10.2f}"
+                f"{self.result_sparsity[i]:>16.2f}"
+                f"{self.result_acc[i]:>16.2f}"
+                f"{self.result_loss[i]:>12.4f}"
             )
         print()
 
-    def save_results(self):
-        output_dir = os.path.dirname(self.cfgModel.path_backup)
+    def save_results(self, mode: str):
+        self._ensure_output_dir()
         output_path = os.path.join(
-            self.cfgModel.path_backup, 
-            "pruning_results_"+self.cfgModel.label+".json")
-        output_dir = os.path.dirname(self.cfgModel.path_backup)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-
+            self.cfgModel.path_backup,
+            f"pruning_results_{mode}_{self.cfgModel.label}.json",
+        )
         payload = {
+            "mode": mode,
             "device": str(self.cfgModel.device),
             "batch_size": self.cfgModel.batch_size,
-            "ratios": self.ratios,
+            "ratios": self.result_ratio,
             "results": [
                 {
-                    "pruning_ratio": self.result_ratio[i],
+                    "ratio": self.result_ratio[i],
                     "sparsity": self.result_sparsity[i],
                     "accuracy": self.result_acc[i],
                     "loss": self.result_loss[i],
@@ -80,96 +126,90 @@ class Prunning:
                 for i in range(len(self.result_ratio))
             ],
         }
-
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         print(f"Saved JSON results: {output_path}")
 
-    def plot(self):
-        ratios = self.result_ratio
-        accuracies = self.result_acc
-        losses = self.result_loss
-
+    def plot(self, mode: str):
+        if not self.result_ratio:
+            return
+        self._ensure_output_dir()
         fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
-        axes[0].plot(ratios, accuracies, marker="o", linewidth=2, color="#1f77b4")
-        axes[0].set_title("Accuracy vs Pruning Ratio")
-        axes[0].set_xlabel("Pruning ratio")
+        axes[0].plot(self.result_ratio, self.result_acc, marker="o", linewidth=2, color="#1f77b4")
+        axes[0].set_title("Accuracy vs Ratio")
+        axes[0].set_xlabel("Ratio")
         axes[0].set_ylabel("Accuracy (%)")
         axes[0].grid(alpha=0.3)
 
-        axes[1].plot(ratios, losses, marker="o", linewidth=2, color="#d62728")
-        axes[1].set_title("Loss vs Pruning Ratio")
-        axes[1].set_xlabel("Pruning ratio")
+        axes[1].plot(self.result_ratio, self.result_loss, marker="o", linewidth=2, color="#d62728")
+        axes[1].set_title("Loss vs Ratio")
+        axes[1].set_xlabel("Ratio")
         axes[1].set_ylabel("Cross-entropy loss")
         axes[1].grid(alpha=0.3)
 
         plt.tight_layout()
-        plt.savefig(self.cfgModel.path_backup + "/prune_plot_"+self.cfgModel.label+".png", dpi=300, bbox_inches="tight")
+        output_plot = os.path.join(
+            self.cfgModel.path_backup,
+            f"prune_plot_{mode}_{self.cfgModel.label}.png",
+        )
+        plt.savefig(output_plot, dpi=300, bbox_inches="tight")
         plt.close(fig)
-    
-    def unstructured(self):
-        print(f"Pruning {self.pruning_percentage}% of the model parameters.")
-        for ratio in self.ratios:
-            # Copy to avoid modifying the original model, and prune from the same start point
+        print(f"Saved plot: {output_plot}")
+
+    def _finalize(self, mode: str, title: str, last_model: Optional[nn.Module]):
+        self.print_results_table(title=title)
+        self.save_results(mode=mode)
+        self.plot(mode=mode)
+
+        if last_model is not None:
+            self._ensure_output_dir()
+            output_model = os.path.join(
+                self.cfgModel.path_backup,
+                f"pruned_model_{mode}_{self.cfgModel.label}.pth",
+            )
+            torch.save(last_model.state_dict(), output_model)
+            print(f"Saved pruned model state_dict: {output_model}")
+
+
+class PrunningUnstructured(_PrunningBase):
+    def unstructured(self, ratios: Optional[List[float]] = None):
+        run_ratios = self.ratios if ratios is None else list(ratios)
+        self._reset_results()
+        last_model = None
+
+        print(f"Running unstructured pruning for ratios: {run_ratios}")
+        for ratio in run_ratios:
             pruned_model = copy.deepcopy(self.cfgModel.model)
+
             if ratio > 0.0:
-                # build pruning params for THIS copy of the model
-                params_to_prune = [
-                    (module, "weight")
-                    for module in pruned_model.modules()
-                    if isinstance(module, (nn.Conv2d, nn.Linear)) and module.weight is not None
-                ]
+                params = self._all_prunable_params(pruned_model)
                 prune.global_unstructured(
-                    params_to_prune,
+                    params,
                     pruning_method=prune.L1Unstructured,
                     amount=ratio,
                 )
-                for module, name in params_to_prune:
-                    prune.remove(module, name)
+                self._remove_reparam(params)
 
-            # Temporarily swap the model inside cfgModel to reuse its evaluate()
-            original_model = self.cfgModel.model
-            try:
-                self.cfgModel.model = pruned_model.to(self.cfgModel.device)
-                loss, acc = self.cfgModel.evaluate()
-            finally:
-                self.cfgModel.model = original_model
-
+            loss, acc = self._evaluate_copy(pruned_model)
             sparsity = self.compute_sparsity(pruned_model)
-            self.result_ratio.append(ratio)
-            self.result_sparsity.append(sparsity)
-            self.result_acc.append(acc)
-            self.result_loss.append(loss)
-            
+            self._add_result(ratio=ratio, sparsity=sparsity, acc=acc, loss=loss)
+            last_model = pruned_model
+
             print(
-                f"[ratio={ratio:.2f}] sparsity={sparsity:.2f}% | "
-                f"acc={acc:.2f}% | loss={loss:.4f}"
+                f"[unstructured ratio={ratio:.2f}] "
+                f"sparsity={sparsity:.2f}% | acc={acc:.2f}% | loss={loss:.4f}"
             )
 
-        self.print_results_table()
-        self.save_results()
-        self.plot()
+        self._finalize(
+            mode="unstructured",
+            title="Unstructured Pruning Results",
+            last_model=last_model,
+        )
 
-        # save model
-        output_path = os.path.join(x
-            self.cfgModel.path_backup, 
-            "pruned_model_"+self.cfgModel.label+".pth")
-        torch.save(self.cfgModel.model.state_dict(), output_path)
-        print(f"Saved pruned model state_dict: {output_path}")
 
-    
-class PrunningStructured(Prunning):
-    def __init__(self, cfgModel, pruning_percentage, ratios, params_to_prune,
-                 q_w, q_a, w_ref, f_ref
-                 ):
-        super().__init__(cfgModel, pruning_percentage, ratios, params_to_prune)
-        self.q_w = q_w
-        self.q_a = q_a
-        self.w_ref = w_ref
-        self.f_ref = f_ref
-
-    def count_weights(self,model):
+class PrunningStructured(PrunningUnstructured):
+    def count_weights(self, model):
         return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     def count_macs(self, model: nn.Module, input_shape=(3, 32, 32)):
@@ -182,9 +222,9 @@ class PrunningStructured(Prunning):
             kernel_ops = (module.in_channels // module.groups) * module.kernel_size[0] * module.kernel_size[1]
             macs += output.shape[0] * module.out_channels * out_h * out_w * kernel_ops
 
-        def linear_hook(module: nn.Linear, _inputs, output):
+        def linear_hook(module: nn.Linear, _inputs, _output):
             nonlocal macs
-            macs += output.shape[0] * module.in_features * module.out_features
+            macs += module.in_features * module.out_features
 
         for m in model.modules():
             if isinstance(m, nn.Conv2d):
@@ -192,26 +232,142 @@ class PrunningStructured(Prunning):
             elif isinstance(m, nn.Linear):
                 handles.append(m.register_forward_hook(linear_hook))
 
+        model_device = next(model.parameters()).device
         model.eval()
         with torch.no_grad():
-            model(torch.randn(1, *input_shape))
+            model(torch.randn(1, *input_shape, device=model_device))
         for h in handles:
             h.remove()
         return int(macs)
-    
-    def structured(self):
-        w = self.count_weights(self.cfgModel.model)
-        f = self.count_macs()
 
-        print(f"w={w} | f={f} | q_w={self.q_w} | q_a={self.q_a} | w_ref={self.w_ref} | f_ref={self.f_ref}")
-        all_results = []
-        for p_s in sorted(set(self.ratios)):
-            p_u_score = (1.0 - p_s) * (self.q_w * w / self.w_ref) + (1.0 - p_s) * (self.q_a * f / self.f_ref)
-            if p_s + p_u_score >= 1.0:
-                print(f"Skipping invalid combo p_s={p_s:.2f}, p_u_score={p_u_score:.2f} (p_s+p_u_score >= 1).")
-                continue
+    def structured(self, ratios: Optional[List[float]] = None):
+        run_ratios = self.ratios if ratios is None else list(ratios)
+        self._reset_results()
+        last_model = None
 
+        print(f"Running structured pruning for ratios: {run_ratios}")
+        for ratio in run_ratios:
             pruned_model = copy.deepcopy(self.cfgModel.model)
 
-            #quantize weights
+            if ratio > 0.0:
+                conv_params = self._conv_params(pruned_model)
+                for module, name in conv_params:
+                    prune.ln_structured(module, name=name, amount=ratio, n=1, dim=0)
+                self._remove_reparam(conv_params)
 
+            loss, acc = self._evaluate_copy(pruned_model)
+            sparsity = self.compute_sparsity(pruned_model)
+            self._add_result(ratio=ratio, sparsity=sparsity, acc=acc, loss=loss)
+            last_model = pruned_model
+
+            print(
+                f"[structured ratio={ratio:.2f}] "
+                f"sparsity={sparsity:.2f}% | acc={acc:.2f}% | loss={loss:.4f}"
+            )
+
+        self._finalize(
+            mode="structured",
+            title="Structured Pruning Results",
+            last_model=last_model,
+        )
+
+    def combined(
+        self,
+        structured_ratios: Optional[List[float]] = None,
+        unstructured_ratios: Optional[List[float]] = None,
+        avoid_overlap: bool = True,
+    ):
+        s_ratios = self.ratios if structured_ratios is None else list(structured_ratios)
+        u_ratios = s_ratios if unstructured_ratios is None else list(unstructured_ratios)
+        if len(s_ratios) != len(u_ratios):
+            raise ValueError(
+                "structured_ratios and unstructured_ratios must have same length "
+                f"(got {len(s_ratios)} and {len(u_ratios)})."
+            )
+
+        self._reset_results()
+        last_model = None
+
+        print(
+            "Running combined pruning (structured + unstructured). "
+            f"avoid_overlap={avoid_overlap}"
+        )
+        for p_s, p_u in zip(s_ratios, u_ratios):
+            pruned_model = copy.deepcopy(self.cfgModel.model)
+
+            if p_s > 0.0:
+                conv_params = self._conv_params(pruned_model)
+                for module, name in conv_params:
+                    prune.ln_structured(module, name=name, amount=p_s, n=1, dim=0)
+                self._remove_reparam(conv_params)
+
+            total_before_u, zeros_before_u = self._count_total_and_zeros(pruned_model)
+            expected_new_zeros = 0
+
+            if p_u > 0.0:
+                params = self._all_prunable_params(pruned_model)
+                if avoid_overlap:
+                    importance_scores = {}
+                    nonzero = 0
+                    with torch.no_grad():
+                        for module, name in params:
+                            w = getattr(module, name)
+                            nz = w != 0
+                            nonzero += nz.sum().item()
+                            scores = w.detach().abs().clone()
+                            scores[~nz] = float("inf")
+                            importance_scores[(module, name)] = scores
+
+                    expected_new_zeros = min(int(nonzero * p_u), nonzero)
+                    if expected_new_zeros > 0:
+                        prune.global_unstructured(
+                            params,
+                            pruning_method=prune.L1Unstructured,
+                            amount=expected_new_zeros,
+                            importance_scores=importance_scores,
+                        )
+                        self._remove_reparam(params)
+                else:
+                    prune.global_unstructured(
+                        params,
+                        pruning_method=prune.L1Unstructured,
+                        amount=p_u,
+                    )
+                    self._remove_reparam(params)
+
+            total_after_u, zeros_after_u = self._count_total_and_zeros(pruned_model)
+            new_zeros = zeros_after_u - zeros_before_u
+            if total_before_u != total_after_u:
+                raise RuntimeError("Unexpected parameter count change during pruning.")
+
+            print(
+                f"[verify p_s={p_s:.2f}, p_u={p_u:.2f}] "
+                f"total={total_after_u} | zeros_before_u={zeros_before_u} | "
+                f"zeros_after_u={zeros_after_u} | new_zeros={new_zeros} | "
+                f"expected_new_zeros={expected_new_zeros}"
+            )
+
+            loss, acc = self._evaluate_copy(pruned_model)
+            sparsity = self.compute_sparsity(pruned_model)
+            effective_ratio = p_s + (1.0 - p_s) * p_u
+            self._add_result(ratio=effective_ratio, sparsity=sparsity, acc=acc, loss=loss)
+            last_model = pruned_model
+
+            print(
+                f"[combined p_s={p_s:.2f}, p_u={p_u:.2f}, eff={effective_ratio:.2f}] "
+                f"sparsity={sparsity:.2f}% | acc={acc:.2f}% | loss={loss:.4f}"
+            )
+
+        self._finalize(
+            mode="combined",
+            title="Combined Structured + Unstructured Results",
+            last_model=last_model,
+        )
+
+    # Backward-compatible alias used by current main.py versions.
+    def structured_unstructured_no_overlap(self, unstructured_ratios=None):
+        self.combined(
+            structured_ratios=self.ratios,
+            unstructured_ratios=unstructured_ratios,
+            avoid_overlap=True,
+        )

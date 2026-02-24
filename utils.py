@@ -57,6 +57,12 @@ class ConfigModel:
                 scheduler_name="LinearLR+CosineAnnealingLR",
                 early_stopping_patience=150,
                 early_stopping_min_delta=0.0,
+
+                # pruning settings
+                pruning_method="combined",  # "unstructured", "structured", or "combined"
+                structured_ratios=[0.25],  # structured pruning ratios
+                unstructured_ratios=[0.25],  # unstructured pruning ratios
+                avoid_overlap=True,  # avoid overlapping pruning
                  
                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
                  
@@ -87,6 +93,12 @@ class ConfigModel:
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_min_delta = early_stopping_min_delta
         self.device = device    
+
+        # pruning settings
+        self.pruning_method = pruning_method
+        self.structured_ratios = structured_ratios
+        self.unstructured_ratios = unstructured_ratios
+        self.avoid_overlap = avoid_overlap
 
         # ensure model is on the correct device
         self.model = self.model.to(self.device)
@@ -228,6 +240,7 @@ class ConfigModel:
                     }
                 )
             
+            print(f"Epoch {epoch+1}/{self.num_epochs} Train/Test Acc: {train_acc:.2f}%/{test_acc:.2f}% Train/Test Loss: {train_loss:.4f}/{test_loss:.4f} LR: {self.scheduler.get_last_lr()[0]:.6f}")
             
             # Save best model
             if test_acc > best_acc:
@@ -306,3 +319,12 @@ class ConfigModel:
         if self.device == "cuda":
             if type == "fp16":
                 return model.half()
+            
+    def calculate_score(self, p_s, p_u, q_w, q_a, w, f):
+        print(f"Calculating score with p_s={p_s}, p_u={p_u}, q_w={q_w}, q_a={q_a}, w={w}, f={f}")
+        param_score = (1 - (p_s + p_u)) * (q_w / 32) * w / 5.6e6
+        ops_score = (1 - p_s) * (max(q_w, q_a) / 32) * f / 2.8e8
+        total_score = param_score + ops_score
+
+        print(f"Param score: {param_score:.4f}, Ops score: {ops_score:.4f}, Total score: {total_score:.4f}")
+        return total_score

@@ -1,0 +1,22 @@
+{
+  "device": "cuda",
+  "batch_size": 128,
+  "ratios": [
+    0.0,
+    0.25
+  ],
+  "results": [
+    {
+      "pruning_ratio": 0.0,
+      "sparsity": 0.0,
+      "accuracy": 92.69,
+      "loss": 0.6832568822577357
+    },
+    {
+      "pruning_ratio": 0.25,
+      "sparsity": 24.940373263371296,
+      "accuracy": 9.74,
+      "loss": 3.656032261376183
+    }
+  ]
+}
