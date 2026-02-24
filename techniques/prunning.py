@@ -152,8 +152,66 @@ class Prunning:
         self.plot()
 
         # save model
-        output_path = os.path.join(
+        output_path = os.path.join(x
             self.cfgModel.path_backup, 
             "pruned_model_"+self.cfgModel.label+".pth")
         torch.save(self.cfgModel.model.state_dict(), output_path)
         print(f"Saved pruned model state_dict: {output_path}")
+
+    
+class PrunningStructured(Prunning):
+    def __init__(self, cfgModel, pruning_percentage, ratios, params_to_prune,
+                 q_w, q_a, w_ref, f_ref
+                 ):
+        super().__init__(cfgModel, pruning_percentage, ratios, params_to_prune)
+        self.q_w = q_w
+        self.q_a = q_a
+        self.w_ref = w_ref
+        self.f_ref = f_ref
+
+    def count_weights(self,model):
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    def count_macs(self, model: nn.Module, input_shape=(3, 32, 32)):
+        macs = 0
+        handles = []
+
+        def conv_hook(module: nn.Conv2d, _inputs, output):
+            nonlocal macs
+            out_h, out_w = output.shape[2], output.shape[3]
+            kernel_ops = (module.in_channels // module.groups) * module.kernel_size[0] * module.kernel_size[1]
+            macs += output.shape[0] * module.out_channels * out_h * out_w * kernel_ops
+
+        def linear_hook(module: nn.Linear, _inputs, output):
+            nonlocal macs
+            macs += output.shape[0] * module.in_features * module.out_features
+
+        for m in model.modules():
+            if isinstance(m, nn.Conv2d):
+                handles.append(m.register_forward_hook(conv_hook))
+            elif isinstance(m, nn.Linear):
+                handles.append(m.register_forward_hook(linear_hook))
+
+        model.eval()
+        with torch.no_grad():
+            model(torch.randn(1, *input_shape))
+        for h in handles:
+            h.remove()
+        return int(macs)
+    
+    def structured(self):
+        w = self.count_weights(self.cfgModel.model)
+        f = self.count_macs()
+
+        print(f"w={w} | f={f} | q_w={self.q_w} | q_a={self.q_a} | w_ref={self.w_ref} | f_ref={self.f_ref}")
+        all_results = []
+        for p_s in sorted(set(self.ratios)):
+            p_u_score = (1.0 - p_s) * (self.q_w * w / self.w_ref) + (1.0 - p_s) * (self.q_a * f / self.f_ref)
+            if p_s + p_u_score >= 1.0:
+                print(f"Skipping invalid combo p_s={p_s:.2f}, p_u_score={p_u_score:.2f} (p_s+p_u_score >= 1).")
+                continue
+
+            pruned_model = copy.deepcopy(self.cfgModel.model)
+
+            #quantize weights
+
