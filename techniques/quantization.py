@@ -30,10 +30,11 @@ class QuantizationAwareConfig(ConfigModel):
         for inputs, labels in tqdm(self.train_data, desc="Training"):
             inputs, labels = inputs.to(self.device), labels.to(self.device)
             #lsq
-            self.optimizer.zero_grad(set_to_none=True)
+            
 
             if self.input_dtype == 'bc':
                 # BinaryConnect-style
+                self.optimizer.zero_grad(set_to_none=True)
                 self.model.binarization()
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, labels)
@@ -43,16 +44,16 @@ class QuantizationAwareConfig(ConfigModel):
                 self.model.clip()
 
             elif self.input_dtype == 'bf16':
-                inputs.half()  # Convert inputs to BF16
-                # BF16 autocast
-                with autocast(dtype=torch.bfloat16):
-                    outputs = self.model(inputs)
-                    loss = self.criterion(outputs, labels)
+                inputs = inputs.half()  # Convert inputs to BF16
+                self.optimizer.zero_grad(set_to_none=True)
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
 
             else:
                 # Default FP32
+                self.optimizer.zero_grad(set_to_none=True)
                 outputs = self.model(inputs)
                 loss = self.criterion(outputs, labels)
                 loss.backward()
@@ -68,7 +69,9 @@ class QuantizationAwareConfig(ConfigModel):
         epoch_acc = 100.0 * correct / total
         return epoch_loss, epoch_acc
     
-    def evaluate(self):
+    def evaluate(self, model=None):
+        if model is not None:
+            self.model = model
         self.model.eval()
         running_loss = 0.0
         correct = 0
@@ -79,9 +82,9 @@ class QuantizationAwareConfig(ConfigModel):
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
 
                 if self.input_dtype == "bf16":
-                    with autocast(dtype=torch.bfloat16):
-                        outputs = self.model(inputs)
-                        loss = self.criterion(outputs, labels)
+                    inputs = inputs.half()  # Convert inputs to BF16
+                    outputs = self.model(inputs)
+                    loss = self.criterion(outputs, labels)
 
                 elif self.input_dtype == "bc":
                     self.model.binarization()
@@ -166,6 +169,7 @@ class QuantizationAwareConfig(ConfigModel):
             if test_acc > best_acc:
                 best_acc = test_acc
                 best_path = os.path.join(self.path_backup, f"best_model_{self.label}.pth")
+                torch.save(self.model.state_dict(), best_path)
                 #self.export_model()
 
                 print(
@@ -204,43 +208,5 @@ class QuantizationAwareConfig(ConfigModel):
             import wandb
             wandb.save(final_path)
 
-        # === Plot loss evolution
-        epochs_range = range(1, len(self.train_losses) + 1)
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(epochs_range, self.train_losses, label="Training Loss", linewidth=2)
-        plt.plot(epochs_range, self.test_losses, label="Validation Loss", linewidth=2)
-        plt.xlabel("Epoch", fontsize=12)
-        plt.ylabel("Loss", fontsize=12)
-        plt.title("Training and Validation Loss Evolution", fontsize=14)
-        plt.legend(fontsize=11)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-
-        loss_plot_path = os.path.join(self.path_backup, f"loss_evolution_{self.label}.png")
-        plt.savefig(loss_plot_path, dpi=300, bbox_inches="tight")
-        plt.close()
-        print(f"Loss evolution plot saved to '{loss_plot_path}'")
-
         if self.wand_on:
-            wandb.save(loss_plot_path)
-
-        # === Plot accuracy evolution
-        plt.figure(figsize=(10, 6))
-        plt.plot(epochs_range, self.train_accs, label="Training Accuracy", linewidth=2)
-        plt.plot(epochs_range, self.test_accs, label="Validation Accuracy", linewidth=2)
-        plt.xlabel("Epoch", fontsize=12)
-        plt.ylabel("Accuracy (%)", fontsize=12)
-        plt.title("Training and Validation Accuracy Evolution", fontsize=14)
-        plt.legend(fontsize=11)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-
-        acc_plot_path = os.path.join(self.path_backup, f"accuracy_evolution_{self.label}.png")
-        plt.savefig(acc_plot_path, dpi=300, bbox_inches="tight")
-        plt.close()
-        print(f"Accuracy evolution plot saved to '{acc_plot_path}'")
-
-        if self.wand_on:
-            wandb.save(acc_plot_path)
             wandb.finish()

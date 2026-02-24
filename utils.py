@@ -60,8 +60,8 @@ class ConfigModel:
 
                 # pruning settings
                 pruning_method="combined",  # "unstructured", "structured", or "combined"
-                structured_ratios=[0.25],  # structured pruning ratios
-                unstructured_ratios=[0.25],  # unstructured pruning ratios
+                structured_ratios=None,  # structured pruning ratios
+                unstructured_ratios=None,  # unstructured pruning ratios
                 avoid_overlap=True,  # avoid overlapping pruning
                  
                 device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
@@ -96,8 +96,8 @@ class ConfigModel:
 
         # pruning settings
         self.pruning_method = pruning_method
-        self.structured_ratios = structured_ratios
-        self.unstructured_ratios = unstructured_ratios
+        self.structured_ratios = list(structured_ratios) if structured_ratios is not None else [0.25]
+        self.unstructured_ratios = list(unstructured_ratios) if unstructured_ratios is not None else [0.25]
         self.avoid_overlap = avoid_overlap
 
         # ensure model is on the correct device
