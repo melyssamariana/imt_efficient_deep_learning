@@ -1,0 +1,33 @@
+{
+  "checkpoint": "/home/antonio/imt_efficient_deep_learning/antonio/best_model_binaryconnect.pth",
+  "device": "cuda",
+  "strategy": "global_pruning_retrain_binaryconnect",
+  "ratios": [
+    0.7
+  ],
+  "finetune_epochs": 50,
+  "lr": 0.005,
+  "momentum": 0.9,
+  "weight_decay": 0.0001,
+  "q_w": 1,
+  "q_a": 32,
+  "w": 269722,
+  "f": 40551040,
+  "w_ref": 5600000.0,
+  "f_ref": 280000000.0,
+  "results": [
+    {
+      "pruning_ratio": 0.7,
+      "p_u": 0.6999992546657922,
+      "pre_retrain_accuracy_percent": 10.03,
+      "pre_retrain_loss": 5.0018366462707515,
+      "post_retrain_accuracy_percent": 88.77,
+      "post_retrain_loss": 0.35438115086555483,
+      "raw_param_term": 2528.6500322822876,
+      "raw_ops_term": 40551040.0,
+      "raw_score": 40553568.65003228,
+      "reference_score": 285600000.0,
+      "score_vs_reference_percent": 14.199428799030912
+    }
+  ]
+}

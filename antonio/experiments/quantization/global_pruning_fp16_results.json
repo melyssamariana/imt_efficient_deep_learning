@@ -1,0 +1,53 @@
+{
+  "checkpoint": "/home/antonio/imt_efficient_deep_learning/antonio/best_model.pth",
+  "device": "cuda",
+  "precision_note": "native FP16 (model + inputs)",
+  "batch_size": 128,
+  "num_workers": 2,
+  "ratios": [
+    0.0,
+    0.2,
+    0.4,
+    0.6,
+    0.8,
+    0.9
+  ],
+  "results": [
+    {
+      "pruning_ratio": 0.0,
+      "weight_sparsity_percent": 0.0,
+      "accuracy_percent": 92.68,
+      "avg_loss": 0.278371875
+    },
+    {
+      "pruning_ratio": 0.2,
+      "weight_sparsity_percent": 19.999925466579214,
+      "accuracy_percent": 92.65,
+      "avg_loss": 0.2785609375
+    },
+    {
+      "pruning_ratio": 0.4,
+      "weight_sparsity_percent": 39.99985093315843,
+      "accuracy_percent": 91.95,
+      "avg_loss": 0.31730546875
+    },
+    {
+      "pruning_ratio": 0.6,
+      "weight_sparsity_percent": 60.00014906684157,
+      "accuracy_percent": 85.49,
+      "avg_loss": 0.639151171875
+    },
+    {
+      "pruning_ratio": 0.8,
+      "weight_sparsity_percent": 80.00007453342079,
+      "accuracy_percent": 21.83,
+      "avg_loss": 2.054578125
+    },
+    {
+      "pruning_ratio": 0.9,
+      "weight_sparsity_percent": 89.99985093315843,
+      "accuracy_percent": 10.63,
+      "avg_loss": 2.43979375
+    }
+  ]
+}

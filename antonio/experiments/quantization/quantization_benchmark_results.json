@@ -1,0 +1,40 @@
+{
+  "checkpoint": "/home/antonio/imt_efficient_deep_learning/antonio/experiments/quantization/best_model.pth",
+  "device": "cuda",
+  "batch_size": 128,
+  "warmup_batches": 10,
+  "max_batches": null,
+  "fp8_format": "e4m3",
+  "results": [
+    {
+      "name": "Baseline FP32",
+      "accuracy": 92.69,
+      "avg_loss": 0.2784045074939728,
+      "timed_images": 8720,
+      "avg_batch_latency_ms": 4.4263322906217715,
+      "avg_image_latency_ms": 0.03502487707028695,
+      "throughput_img_s": 28551.1351829509,
+      "timing_note": "Forward-pass latency excludes data loading and host->device transfer."
+    },
+    {
+      "name": "FP16 (native)",
+      "accuracy": 92.68,
+      "avg_loss": 0.278371875,
+      "timed_images": 8720,
+      "avg_batch_latency_ms": 3.227023774299069,
+      "avg_image_latency_ms": 0.025534935828742632,
+      "throughput_img_s": 39162.03301652241,
+      "timing_note": "Forward-pass latency excludes data loading and host->device transfer."
+    },
+    {
+      "name": "FP8-e4m3 (emulated)",
+      "accuracy": 92.69,
+      "avg_loss": 0.2813389587402344,
+      "timed_images": 8720,
+      "avg_batch_latency_ms": 3.8707682464433755,
+      "avg_image_latency_ms": 0.030628785436306524,
+      "throughput_img_s": 32649.025606305215,
+      "timing_note": "Forward-pass latency excludes data loading and host->device transfer."
+    }
+  ]
+}

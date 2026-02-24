@@ -1,0 +1,57 @@
+{
+  "checkpoint": "/home/antonio/imt_efficient_deep_learning/antonio/experiments/quantization/best_model.pth",
+  "device": "cuda",
+  "eval_precision": "fp16",
+  "eval_note": "FP16 eval via CUDA autocast",
+  "layer_finetune_epochs": 1,
+  "lr": 0.003,
+  "momentum": 0.9,
+  "weight_decay": 0.0001,
+  "ratios": [
+    0.2,
+    0.4,
+    0.6,
+    0.8
+  ],
+  "train_subset_size": null,
+  "max_train_batches": null,
+  "max_test_batches": null,
+  "results": [
+    {
+      "pruning_ratio": 0.2,
+      "filter_sparsity_percent": 11.482558139534884,
+      "weight_sparsity_percent": 12.930338891877353,
+      "oneshot_accuracy_percent": 11.0,
+      "oneshot_loss": 2.874225,
+      "gradual_accuracy_percent": 89.99,
+      "gradual_loss": 0.318612890625
+    },
+    {
+      "pruning_ratio": 0.4,
+      "filter_sparsity_percent": 22.819767441860463,
+      "weight_sparsity_percent": 29.283216783216783,
+      "oneshot_accuracy_percent": 10.0,
+      "oneshot_loss": 3.165625,
+      "gradual_accuracy_percent": 87.17,
+      "gradual_loss": 0.3820435546875
+    },
+    {
+      "pruning_ratio": 0.6,
+      "filter_sparsity_percent": 34.30232558139535,
+      "weight_sparsity_percent": 47.9861484669177,
+      "oneshot_accuracy_percent": 10.0,
+      "oneshot_loss": 2.614996875,
+      "gradual_accuracy_percent": 85.97,
+      "gradual_loss": 0.414948828125
+    },
+    {
+      "pruning_ratio": 0.8,
+      "filter_sparsity_percent": 48.11046511627907,
+      "weight_sparsity_percent": 71.37573964497041,
+      "oneshot_accuracy_percent": 10.0,
+      "oneshot_loss": 2.7277,
+      "gradual_accuracy_percent": 75.89,
+      "gradual_loss": 0.70418203125
+    }
+  ]
+}
