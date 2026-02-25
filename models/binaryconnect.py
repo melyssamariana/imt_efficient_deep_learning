@@ -29,16 +29,12 @@ class BC(nn.Module):
         if self.binarize_activations:
             self._replace_relu_with_binary(self.model)
 
-        # Track all Conv2d/Linear weights to binarize.
         self.target_modules = []
-        for module in self.model.modules():
-            if isinstance(module, (nn.Conv2d, nn.Linear)):
-                self.target_modules.append(module.weight)
-
-        self.num_of_params = len(self.target_modules)
-        self.saved_params = [param.detach().clone() for param in self.target_modules]
-        self.pruning_masks = [torch.ones_like(param) for param in self.target_modules]
+        self.num_of_params = 0
+        self.saved_params = []
+        self.pruning_masks = []
         self._mask_initialized = False
+        self.refresh_binary_state(reset_mask_from_current_zeros=False)
 
     def _replace_relu_with_binary(self, module):
         for name, child in module.named_children():
@@ -46,6 +42,24 @@ class BC(nn.Module):
                 setattr(module, name, BinaryActivationSTE())
             else:
                 self._replace_relu_with_binary(child)
+
+    def _rebuild_target_modules(self):
+        self.target_modules = []
+        for module in self.model.modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)) and module.weight is not None:
+                self.target_modules.append(module.weight)
+        self.num_of_params = len(self.target_modules)
+
+    def refresh_binary_state(self, reset_mask_from_current_zeros=True):
+        """
+        Rebuild internal BC buffers after structural weight changes (e.g., pruning remove()).
+        """
+        self._rebuild_target_modules()
+        self.saved_params = [param.detach().clone() for param in self.target_modules]
+        self.pruning_masks = [torch.ones_like(param) for param in self.target_modules]
+        self._mask_initialized = False
+        if reset_mask_from_current_zeros and self.preserve_pruned_zeros and self.auto_mask_from_zeros:
+            self.set_pruning_masks_from_current_weights()
 
     def set_pruning_masks_from_current_weights(self):
         """

@@ -168,6 +168,9 @@ class _PrunningBase:
 
         if last_model is not None:
             prepared = self._prepare_model(last_model)
+            # BC wrapper needs to rebuild internal weight references after prune/remove.
+            if hasattr(prepared, "refresh_binary_state") and callable(prepared.refresh_binary_state):
+                prepared.refresh_binary_state(reset_mask_from_current_zeros=True)
             if set_as_current_model:
                 self.cfgModel.model = prepared
             return prepared

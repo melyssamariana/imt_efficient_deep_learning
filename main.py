@@ -58,29 +58,32 @@ def main():
     )
     
     cfg.criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
-    cfg.optimizer = optim.SGD(
-        cfg.model.parameters(),
-        lr=cfg.learning_rate,
-        momentum=cfg.momentum,
-        weight_decay=cfg.weight_decay,
-        nesterov=cfg.nesterov,
-    )
-    warmup = optim.lr_scheduler.LinearLR(
-        cfg.optimizer,
-        start_factor=0.1,
-        end_factor=1.0,
-        total_iters=cfg.warmup_epochs,
-    )
-    cosine = optim.lr_scheduler.CosineAnnealingLR(
-        cfg.optimizer,
-        T_max=max(1, cfg.num_epochs - cfg.warmup_epochs),
-    )
-    
-    cfg.scheduler = optim.lr_scheduler.SequentialLR(
-        cfg.optimizer,
-        schedulers=[warmup, cosine],
-        milestones=[cfg.warmup_epochs],
-    )
+
+    def reset_opt_and_sched():
+        cfg.optimizer = optim.SGD(
+            cfg.model.parameters(),
+            lr=cfg.learning_rate,
+            momentum=cfg.momentum,
+            weight_decay=cfg.weight_decay,
+            nesterov=cfg.nesterov,
+        )
+        warmup = optim.lr_scheduler.LinearLR(
+            cfg.optimizer,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=cfg.warmup_epochs,
+        )
+        cosine = optim.lr_scheduler.CosineAnnealingLR(
+            cfg.optimizer,
+            T_max=max(1, cfg.num_epochs - cfg.warmup_epochs),
+        )
+        cfg.scheduler = optim.lr_scheduler.SequentialLR(
+            cfg.optimizer,
+            schedulers=[warmup, cosine],
+            milestones=[cfg.warmup_epochs],
+        )
+
+    reset_opt_and_sched()
 
     params_to_prune = [
         (module, "weight")
@@ -131,6 +134,8 @@ def main():
 
     if pruned_model is not None:
         cfg.model = pruned_model
+        # Rebuild optimizer/scheduler so they update the new pruned model parameters.
+        reset_opt_and_sched()
 
     cfg.train_loop()
     print("End")
