@@ -1,3 +1,4 @@
+from models.binaryconnect import BC
 from techniques.prunning import PrunningStructured, PrunningUnstructured
 import utils
 import torch
@@ -10,13 +11,14 @@ from techniques.quantization import QuantizationAwareConfig
 def main():
     print("====== Efficient Deep Learning ======")
 
-    checkpoint = torch.load("./resnet20_best.pth")
-    model = resnet20()
-    model.load_state_dict(checkpoint)
-    model.eval()
+    checkpoint = torch.load("./resnet20_bc1w1a_best.pth")
+    # model = resnet20()
+
 
     # If you want to use BinaryConnect
-    # model = BC(resnet20())
+    model = BC(resnet20())
+    model.load_state_dict(checkpoint)
+    model.eval()
 
     cfg = QuantizationAwareConfig(
     #cfg = utils.ConfigModel(
@@ -27,14 +29,14 @@ def main():
         test_data=testloader,
         project_name = "imt_efficient_dl",
         path_backup = "./",
-        wand_on=False,
+        wand_on=True,
 
         # If you want to use BinaryConnect, set input_dtype to 'binary'
-        input_dtype = 'bf16', # 'bc' for BinaryConnect, 'bf16' for float16
+        input_dtype = 'bc', # 'bc' for BinaryConnect, 'bf16' for float16
 
         # hyperparameters
         num_epochs=50,
-        learning_rate=0.0001,
+        learning_rate=0.01,
         weight_decay=1e-3,
         optimizer_name='SGD',
         momentum=0.9,
@@ -49,8 +51,8 @@ def main():
 
         # pruning settings
         pruning_method="combined",  # "unstructured", "structured", or "combined"
-        structured_ratios=[0.45],  # structured pruning ratios
-        unstructured_ratios=[0.7],  # unstructured pruning ratios
+        structured_ratios=[0.01],  # structured pruning ratios
+        unstructured_ratios=[0.2],  # unstructured pruning ratios
         avoid_overlap=True,  # avoid overlapping pruning
 
     )
@@ -101,8 +103,8 @@ def main():
     score = cfg.calculate_score(
         p_s=cfg.structured_ratios[0],  # structured pruning ratio
         p_u=cfg.unstructured_ratios[0],  # unstructured pruning ratio
-        q_w=16,    # quantization for weights (example value)
-        q_a=16,    # quantization for activations (example value)
+        q_w=1,    # quantization for weights (example value)
+        q_a=1,    # quantization for activations (example value)
         w=sum(p.numel() for p in cfg.model.parameters()),  # total number of weights
         f=40.55e6,  # total number of MACs (example value for ResNet20 on CIFAR-10)
     )
