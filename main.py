@@ -51,8 +51,8 @@ def main():
 
         # pruning settings
         pruning_method="combined",  # "unstructured", "structured", or "combined"
-        structured_ratios=[0.01],  # structured pruning ratios
-        unstructured_ratios=[0.2],  # unstructured pruning ratios
+        structured_ratios=[0.05],  # structured pruning ratios
+        unstructured_ratios=[0.7],  # unstructured pruning ratios
         avoid_overlap=True,  # avoid overlapping pruning
 
     )
