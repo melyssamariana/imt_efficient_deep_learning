@@ -5,43 +5,23 @@ import torch
 import torch.nn as nn
 
 
-class BinaryActivationSTE(nn.Module):
-    def forward(self, x):
-        # Forward binario em {-1, +1}; backward aproximado por identidade (STE).
-        x_bin = torch.where(x >= 0, torch.ones_like(x), -torch.ones_like(x))
-        return x + (x_bin - x).detach()
-
-
 class BC(nn.Module):
     def __init__(
         self,
         model,
-        binarize_activations=True,
         preserve_pruned_zeros=True,
         auto_mask_from_zeros=True,
     ):
         super().__init__()
         self.model = model
-        self.binarize_activations = binarize_activations
         self.preserve_pruned_zeros = preserve_pruned_zeros
         self.auto_mask_from_zeros = auto_mask_from_zeros
-
-        if self.binarize_activations:
-            self._replace_relu_with_binary(self.model)
-
         self.target_modules = []
         self.num_of_params = 0
         self.saved_params = []
         self.pruning_masks = []
         self._mask_initialized = False
         self.refresh_binary_state(reset_mask_from_current_zeros=False)
-
-    def _replace_relu_with_binary(self, module):
-        for name, child in module.named_children():
-            if isinstance(child, nn.ReLU):
-                setattr(module, name, BinaryActivationSTE())
-            else:
-                self._replace_relu_with_binary(child)
 
     def _rebuild_target_modules(self):
         self.target_modules = []

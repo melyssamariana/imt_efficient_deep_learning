@@ -11,14 +11,14 @@ from techniques.quantization import QuantizationAwareConfig
 def main():
     print("====== Efficient Deep Learning ======")
 
-    checkpoint = torch.load("./resnet20_bc1w1a_best.pth")
+    # checkpoint = torch.load("./resnet20_bc1w1a_best.pth")
     # model = resnet20()
 
 
     # If you want to use BinaryConnect
     model = BC(resnet20())
-    model.load_state_dict(checkpoint)
-    model.eval()
+    # model.load_state_dict(checkpoint)
+    # model.eval()
 
     cfg = QuantizationAwareConfig(
     #cfg = utils.ConfigModel(
@@ -51,8 +51,8 @@ def main():
 
         # pruning settings
         pruning_method="combined",  # "unstructured", "structured", or "combined"
-        structured_ratios=[0.05],  # structured pruning ratios
-        unstructured_ratios=[0.7],  # unstructured pruning ratios
+        structured_ratios=[0.00],  # structured pruning ratios
+        unstructured_ratios=[0.00],  # unstructured pruning ratios
         avoid_overlap=True,  # avoid overlapping pruning
 
     )
