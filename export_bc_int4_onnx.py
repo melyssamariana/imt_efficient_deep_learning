@@ -12,6 +12,7 @@ Fluxo:
 
 import argparse
 import copy
+import inspect
 import os
 from typing import Dict, Tuple
 
@@ -123,23 +124,31 @@ def export_onnx(
     model: torch.nn.Module,
     onnx_path: str,
     device: torch.device,
-    opset: int = 17,
+    opset: int = 18,
 ):
     model.eval()
     os.makedirs(os.path.dirname(onnx_path) or ".", exist_ok=True)
     dummy = torch.randn(1, 3, 32, 32, device=device)
 
-    torch.onnx.export(
-        model,
-        dummy,
-        onnx_path,
-        export_params=True,
-        opset_version=opset,
-        do_constant_folding=True,
-        input_names=["input"],
-        output_names=["logits"],
-        dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
-    )
+    export_kwargs = {
+        "export_params": True,
+        "opset_version": opset,
+        "do_constant_folding": True,
+        "input_names": ["input"],
+        "output_names": ["logits"],
+        "dynamic_axes": {"input": {0: "batch"}, "logits": {0: "batch"}},
+    }
+
+    # Force single-file ONNX (weights embedded in .onnx) for tools like Netron.
+    sig = inspect.signature(torch.onnx.export).parameters
+    if "dynamo" in sig:
+        export_kwargs["dynamo"] = False
+    if "external_data" in sig:
+        export_kwargs["external_data"] = False
+    if "use_external_data_format" in sig:
+        export_kwargs["use_external_data_format"] = False
+
+    torch.onnx.export(model, dummy, onnx_path, **export_kwargs)
 
 
 def evaluate_onnx(
@@ -216,7 +225,7 @@ def main():
     parser.add_argument(
         "--opset",
         type=int,
-        default=17,
+        default=18,
         help="Opset ONNX de exportacao.",
     )
     parser.add_argument(
