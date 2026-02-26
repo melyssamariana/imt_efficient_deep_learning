@@ -11,13 +11,18 @@ from techniques.quantization import QuantizationAwareConfig
 def main():
     print("====== Efficient Deep Learning ======")
 
-    # checkpoint = torch.load("./resnet20_bc1w1a_best.pth")
+    checkpoint = torch.load("./resnet20_bc_best.pth")
     # model = resnet20()
 
 
     # If you want to use BinaryConnect
-    model = BC(resnet20())
-    # model.load_state_dict(checkpoint)
+    model = BC(
+        resnet20(),
+        quantize_activations_int8=True,
+        activation_bits=4,
+    )
+    missing, unexpected = model.load_state_dict(checkpoint, strict=False)
+    print(f"Checkpoint load -> missing: {len(missing)} | unexpected: {len(unexpected)}")
     # model.eval()
 
     cfg = QuantizationAwareConfig(
@@ -35,8 +40,8 @@ def main():
         input_dtype = 'bc', # 'bc' for BinaryConnect, 'bf16' for float16
 
         # hyperparameters
-        num_epochs=50,
-        learning_rate=0.01,
+        num_epochs=30,
+        learning_rate=0.000028,
         weight_decay=1e-3,
         optimizer_name='SGD',
         momentum=0.9,
@@ -51,8 +56,8 @@ def main():
 
         # pruning settings
         pruning_method="combined",  # "unstructured", "structured", or "combined"
-        structured_ratios=[0.00],  # structured pruning ratios
-        unstructured_ratios=[0.00],  # unstructured pruning ratios
+        structured_ratios=[0.05],  # structured pruning ratios
+        unstructured_ratios=[0.1],  # unstructured pruning ratios
         avoid_overlap=True,  # avoid overlapping pruning
 
     )
@@ -107,7 +112,7 @@ def main():
         p_s=cfg.structured_ratios[0],  # structured pruning ratio
         p_u=cfg.unstructured_ratios[0],  # unstructured pruning ratio
         q_w=1,    # quantization for weights (example value)
-        q_a=1,    # quantization for activations (example value)
+        q_a=4,    # quantization for activations (example value)
         w=sum(p.numel() for p in cfg.model.parameters()),  # total number of weights
         f=40.55e6,  # total number of MACs (example value for ResNet20 on CIFAR-10)
     )

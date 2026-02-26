@@ -5,23 +5,99 @@ import torch
 import torch.nn as nn
 
 
+class Int8ActivationFakeQuant(nn.Module):
+    def __init__(self, num_bits=8, ema_decay=0.95, eps=1e-8):
+        super().__init__()
+        self.num_bits = num_bits
+        self.ema_decay = ema_decay
+        self.eps = eps
+        self.qmin = 0
+        self.qmax = (1 << num_bits) - 1
+        self.register_buffer("running_min", torch.tensor(0.0))
+        self.register_buffer("running_max", torch.tensor(0.0))
+        self.register_buffer("initialized", torch.tensor(False, dtype=torch.bool))
+
+    def _update_observer(self, x):
+        x_detached = x.detach()
+        cur_min = x_detached.amin()
+        cur_max = x_detached.amax()
+
+        if not bool(self.initialized.item()):
+            self.running_min.copy_(cur_min)
+            self.running_max.copy_(cur_max)
+            self.initialized.fill_(True)
+            return
+
+        self.running_min.mul_(self.ema_decay).add_(cur_min * (1.0 - self.ema_decay))
+        self.running_max.mul_(self.ema_decay).add_(cur_max * (1.0 - self.ema_decay))
+
+    def forward(self, x):
+        x = torch.relu(x)
+
+        with torch.no_grad():
+            if self.training:
+                self._update_observer(x)
+            elif not bool(self.initialized.item()):
+                # Lazy init to avoid invalid scale during inference-only runs.
+                self._update_observer(x)
+
+        min_val = self.running_min
+        max_val = torch.maximum(
+            self.running_max,
+            self.running_min + torch.tensor(self.eps, device=x.device, dtype=x.dtype),
+        )
+        scale = (max_val - min_val) / float(self.qmax - self.qmin)
+        scale = torch.clamp(scale, min=self.eps)
+        zero_point = torch.round(self.qmin - min_val / scale)
+        zero_point = torch.clamp(zero_point, self.qmin, self.qmax)
+
+        x_q = torch.clamp(torch.round(x / scale + zero_point), self.qmin, self.qmax)
+        x_dq = (x_q - zero_point) * scale
+        # STE: forward quantized, backward approximates identity.
+        return x + (x_dq - x).detach()
+
+
 class BC(nn.Module):
     def __init__(
         self,
         model,
         preserve_pruned_zeros=True,
         auto_mask_from_zeros=True,
+        quantize_activations_int8=False,
+        activation_bits=8,
+        activation_ema_decay=0.95,
     ):
         super().__init__()
         self.model = model
         self.preserve_pruned_zeros = preserve_pruned_zeros
         self.auto_mask_from_zeros = auto_mask_from_zeros
+        self.quantize_activations_int8 = quantize_activations_int8
+        self.activation_bits = activation_bits
+        self.activation_ema_decay = activation_ema_decay
+
+        if self.quantize_activations_int8:
+            self._replace_relu_with_int8_fake_quant(self.model)
+
         self.target_modules = []
         self.num_of_params = 0
         self.saved_params = []
         self.pruning_masks = []
         self._mask_initialized = False
         self.refresh_binary_state(reset_mask_from_current_zeros=False)
+
+    def _replace_relu_with_int8_fake_quant(self, module):
+        for name, child in module.named_children():
+            if isinstance(child, nn.ReLU):
+                setattr(
+                    module,
+                    name,
+                    Int8ActivationFakeQuant(
+                        num_bits=self.activation_bits,
+                        ema_decay=self.activation_ema_decay,
+                    ),
+                )
+            else:
+                self._replace_relu_with_int8_fake_quant(child)
 
     def _rebuild_target_modules(self):
         self.target_modules = []
